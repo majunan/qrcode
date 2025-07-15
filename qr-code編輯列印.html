@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <title>QR碼生成工具</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <style>
+    body { 
+      font-family: Arial, sans-serif; 
+      max-width: 800px; /* 網頁顯示時的最大寬度 */
+      margin: 0 auto; 
+      padding: 20px; 
+    }
+    h1 { font-size: 1.5em; }
+    textarea { width: 100%; height: 100px; padding: 10px; margin-bottom: 10px; }
+    .input-group { margin-bottom: 15px; }
+    .input-group label { display: block; margin-bottom: 5px; font-weight: bold; }
+    
+    /* 網頁顯示時的 QR 碼容器 */
+    #qrcode-container {
+      margin: 20px 0;
+      min-height: 256px; /* 為了頁面顯示時的佔位 */
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      border: 1px dashed #ccc; /* 網頁顯示時的邊框 */
+    }
+    #qrcode-container canvas { /* 網頁顯示時的 QR 碼 Canvas */
+        display: block;
+        max-width: 100%;
+        height: auto;
+        border: none; /* 移除 Canvas 本身的邊框 */
+    }
+
+    /* 網頁顯示時的文本內容容器：預設隱藏，只在列印時顯示 */
+    #text-content-display {
+        display: none; /* 預設在網頁上不顯示 */
+        margin-top: 20px;
+        padding: 10px;
+        border: 1px dashed #ccc; 
+        min-height: 50px; 
+        white-space: pre-wrap; 
+        word-wrap: break-word; 
+    }
+
+    /* 列印時的標題容器 */
+    #print-title {
+      display: none;
+    }
+
+    button { padding: 10px 15px; margin-right: 5px; background: #4285f4; color: white; border: none; cursor: pointer; }
+    .error { color: red; margin-top: 10px; }
+    img { max-width: 100%; margin-top: 10px; }
+
+    /* **** 列印樣式 **** */
+    @media print {
+      /* 設定頁面本身的邊距為0.5公分，但上邊距調整為0.3cm */
+      @page {
+        margin: 0.3cm 0.5cm 0.5cm 0.5cm; /* 上 右 下 左 */
+        size: auto; 
+      }
+
+      html, body {
+        height: 100%; /* 讓html和body在列印時佔滿整個頁面高度 */
+        width: 100%; /* 確保寬度也佔滿 */
+        margin: 0;
+        padding: 0;
+        /* 將 body 變為 flex 容器，用於整個頁面的置中和內容排列 */
+        display: flex;
+        flex-direction: column; /* 改為垂直排列 */
+        justify-content: flex-start; /* 從頂部開始排列 */
+        align-items: center; /* 水平置中 */
+        gap: 0; /* 移除元素之間的間距 */
+        box-sizing: border-box; /* 確保 padding 包含在寬高內 */
+        overflow: hidden; /* 防止內容溢出 */
+      }
+
+      /* 列印標題樣式 */
+      #print-title {
+        display: block !important;
+        text-align: center;
+        font-size: 24px;
+        font-weight: bold;
+        margin: 0 0 5px 0; /* 上右下左 - 上方無間距，下方5px間距 */
+        padding: 0;
+        width: 100%;
+      }
+
+      /* 內容容器（QR碼+文本） */
+      .print-content-container {
+        display: flex;
+        flex-direction: row;
+        justify-content: center;
+        align-items: center;
+        gap: 8px;
+        margin-top: 0; /* 移除上方間距 */
+      }
+
+      /* 隱藏網頁顯示時的 UI 元素 */
+      h1, textarea, button, #error, #photo-output, .input-group label {
+        display: none !important;
+        visibility: hidden !important;
+      }
+      
+      /* QR碼容器的列印樣式 */
+      #qrcode-container {
+        display: block !important; /* 確保在列印時可見 */
+        width: 256px; /* QR碼的固定寬度 */
+        height: 256px; /* QR碼的固定高度 */
+        border: none !important; /* 移除網頁顯示時的邊框 */
+        margin: 0 !important; /* 移除網頁顯示時的邊距 */
+        padding: 0 !important;
+        flex-shrink: 0; /* 防止縮小 */
+      }
+      #qrcode-container canvas {
+        width: 100%; /* 讓 Canvas 填滿其容器 */
+        height: 100%;
+        display: block;
+        border: none !important; /* 確保 Canvas 沒有邊框 */
+      }
+
+      /* 文本內容容器的列印樣式 */
+      #text-content-display {
+        display: flex !important; /* 在列印時強制顯示，並讓文本容器內部也使用 flexbox 實現文本垂直置中 */
+        flex-direction: column;
+        justify-content: center; /* 文本內容在容器內垂直置中 */
+        align-items: flex-start; /* 文本左對齊 */
+        
+        width: 192px; /* 寬度調整為約12個字元（假設字體大小為16px） */
+        height: 256px; /* 高度不變，與QR碼對齊 */
+        overflow: hidden; /* 如果文本過長，隱藏超出部分 */
+
+        margin: 0 !important; /* 移除網頁顯示時的邊距 */
+        padding: 0 !important;
+        font-size: 16px; /* 固定的字體大小 */
+        line-height: 1.2;
+        color: black;
+        box-sizing: border-box;
+        flex-shrink: 0; /* 防止縮小 */
+      }
+    }
+  </style>
+</head>
+<body>
+  <h1 id="title">QR碼生成工具</h1>
+  
+  <div class="input-group">
+    <label for="titleText">列印標題</label>
+    <textarea id="titleText"></textarea>
+  </div>
+  
+  <div class="input-group">
+    <label for="contentText">QR碼內容</label>
+    <textarea id="contentText"></textarea>
+  </div>
+  
+  <button id="generateBtn">生成QR碼</button>
+  <button id="printBtn">列印QR圖片</button>
+
+  <div id="print-title"></div> <!-- 列印時顯示的標題 -->
+
+  <div class="print-content-container">
+    <div id="qrcode-container">
+      <p id="placeholder">QR碼將顯示在這裡</p>
+    </div>
+    <div id="text-content-display"></div> 
+  </div>
+
+  <div id="error" class="error"></div>
+  <div id="photo-output"></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.1/build/qrcode.min.js"></script>
+
+  <script>
+    const lang = navigator.language.startsWith('en') ? 'en' : 'zh';
+
+    const i18n = {
+      zh: {
+        title: 'QR碼生成工具',
+        generate: '生成QR碼',
+        download: '下載QR圖片', 
+        print: '列印QR圖片',
+        error_empty: '錯誤：請輸入內容',
+        placeholder: 'QR碼將顯示在這裡',
+        fatal: '致命錯誤：',
+        titleLabel: '列印標題',
+        contentLabel: 'QR碼內容'
+      },
+      en: {
+        title: 'QR Code Generator',
+        generate: 'Generate QR Code',
+        download: 'Download QR Image', 
+        print: 'Print QR Image',
+        error_empty: 'Error: Please enter content',
+        placeholder: 'QR Code will appear here',
+        fatal: 'Fatal error:',
+        titleLabel: 'Print Title',
+        contentLabel: 'QR Code Content'
+      }
+    };
+
+    const t = i18n[lang];
+
+    // 多語系轉換
+    document.getElementById("title").innerText = t.title;
+    document.querySelector('label[for="titleText"]').innerText = t.titleLabel;
+    document.querySelector('label[for="contentText"]').innerText = t.contentLabel;
+    document.getElementById("generateBtn").innerText = t.generate;
+    document.getElementById("printBtn").innerText = t.print;
+    document.getElementById("placeholder").innerText = t.placeholder;
+
+    document.getElementById('generateBtn').addEventListener('click', generateQRCode);
+    document.getElementById('printBtn').addEventListener('click', preparePrint);
+
+    function preparePrint() {
+      // 更新列印標題
+      const titleText = document.getElementById('titleText').value.trim();
+      document.getElementById('print-title').textContent = titleText;
+      
+      // 觸發列印
+      window.print();
+    }
+
+    function generateQRCode() {
+      const contentText = document.getElementById('contentText').value.trim();
+      const qrCodeContainer = document.getElementById('qrcode-container');
+      const textContentDisplay = document.getElementById('text-content-display');
+      const errorEl = document.getElementById('error');
+      
+      qrCodeContainer.innerHTML = ''; // 清空 QR 碼容器
+      textContentDisplay.innerHTML = ''; // 清空文本內容容器
+      errorEl.textContent = '';
+
+      if (!contentText) {
+        errorEl.textContent = t.error_empty;
+        return;
+      }
+
+      try {
+        const qrCodeSize = 256; // QR碼的寬高
+
+        // 創建一個 Canvas 元素並添加到容器中
+        const qrCanvas = document.createElement('canvas');
+        qrCodeContainer.appendChild(qrCanvas); // 將新創建的 Canvas 添加到 div 容器中
+
+        // 生成 QR Code 到這個新創建的 Canvas 元素上
+        QRCode.toCanvas(qrCanvas, contentText, { width: qrCodeSize, margin: 2 }, function(error) { 
+            if (error) {
+                errorEl.textContent = `${t.fatal} ${error.message}`;
+                console.error('QRCode 生成錯誤:', error);
+            }
+        });
+
+        // 設定文本內容顯示
+        textContentDisplay.textContent = contentText;
+
+      } catch (e) {
+        qrCodeContainer.innerHTML = '<p style="color:red;">系統錯誤</p>'; // 錯誤時的 QR 碼容器提示
+        textContentDisplay.innerHTML = ''; // 清空文本內容
+        errorEl.textContent = `${t.fatal} ${e.message}`;
+      }
+    }
+
+    // 頁面載入時初始生成一次 QR 碼和文本
+    generateQRCode();
+  </script>
+</body>
+</html>
